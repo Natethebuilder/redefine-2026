@@ -1,0 +1,243 @@
+/*
+ * ConnectEdu · Redefine 2026 theme
+ *
+ * Slides are authored on a fixed 1280×720 stage that mirrors the original
+ * PowerPoint geometry (1 PowerPoint point = 4/3 CSS px) and is scaled to fit
+ * any screen. Calibri is used when installed; Carlito (metric-compatible with
+ * Calibri) is bundled so line breaks match the original deck everywhere.
+ */
+@import '@fontsource/carlito/latin-400.css';
+@import '@fontsource/carlito/latin-700.css';
+@import '@fontsource/carlito/latin-400-italic.css';
+@import '@fontsource/carlito/latin-700-italic.css';
+
+:root {
+  --font-family: Calibri, Carlito, 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --background: #0b1020;
+  --slide-bg: #0b1020;
+  --foreground: #ffffff;
+
+  --ce-ink: #0b1020;
+  --ce-violet: #a78bfa;
+  --ce-cyan: #22d3ee;
+  --ce-pink: #f472b6;
+  --ce-green: #34d399;
+  --ce-lilac: #c4b5fd;
+  --ce-purple: #7c3aed;
+  --ce-indigo: #1e1b4b;
+  --ce-navy: #182039;
+  --ce-navy-deep: #131a2e;
+  --ce-line: #263052;
+  --ce-slate: #6b7494;
+  --ce-mist: #9aa3bf;
+  --ce-paper: #e6e8f2;
+  --ce-deep-blue: #073763;
+
+  /*
+   * Calibri/Carlito ascent + descent = 1.2207em, so CSS line boxes match
+   * PowerPoint's single spacing. Kept as a knob for fine-tuning baselines.
+   */
+  --ppt-shift: 0em;
+
+  --ce-ease: cubic-bezier(0.22, 0.8, 0.24, 1);
+  --ce-card-shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.75), 0 2px 8px rgba(3, 6, 18, 0.35);
+}
+
+html,
+body {
+  background: var(--ce-ink);
+}
+
+/* ── Slide shell ─────────────────────────────────────────────────────────── */
+.ce-slide {
+  background: var(--ce-ink);
+  color: #fff;
+}
+
+.ce-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ce-backdrop__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  transform-origin: 62% 45%;
+}
+
+.ce-backdrop__shade {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 14, 26, 0.15);
+}
+
+.slide.active .ce-backdrop--hero .ce-backdrop__img {
+  animation: ce-drift 26s ease-out both;
+}
+
+@keyframes ce-drift {
+  from { transform: scale(1.06); }
+  to   { transform: scale(1); }
+}
+
+.ce-stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1280px;
+  height: 720px;
+  transform: translate(-50%, -50%) scale(var(--stage-scale, 1));
+  transform-origin: center center;
+  font-family: var(--font-family);
+  font-size: 16px;
+  line-height: 1.22;
+  color: #fff;
+  font-kerning: normal;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Primitives ──────────────────────────────────────────────────────────── */
+.ce-frame,
+.ce-box {
+  position: absolute;
+}
+
+/* PowerPoint keeps runs of spaces (e.g. "A  ·  B"); so do we. */
+.ce-frame {
+  white-space: pre-wrap;
+  overflow-wrap: normal;
+}
+
+.ce-mid {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.ce-mid__inner {
+  min-width: 0;
+}
+
+/* List containers span the stage; items position themselves by index. */
+.ce-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ce-layer * {
+  pointer-events: auto;
+}
+
+.ce-contents {
+  display: contents;
+}
+
+/* The 1px outline is drawn as a ring so child offsets match PowerPoint. */
+.ce-card {
+  position: absolute;
+  background: #fff;
+  color: #000;
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px var(--ce-line), var(--ce-card-shadow);
+}
+
+.ce-card--navy {
+  background: var(--ce-navy);
+  color: #fff;
+}
+
+.ce-card--deep {
+  background: var(--ce-navy-deep);
+  box-shadow: 0 0 0 1px var(--ce-navy-deep), var(--ce-card-shadow);
+}
+
+.ce-card--purple {
+  background: linear-gradient(160deg, #8b47f5 0%, var(--ce-purple) 45%, #6d28d9 100%);
+  box-shadow: 0 0 0 1px rgba(196, 181, 253, 0.28), 0 28px 60px -28px rgba(91, 33, 182, 0.85);
+  color: #fff;
+}
+
+.ce-label {
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.ce-arrow {
+  display: block;
+  overflow: visible;
+}
+
+.ce-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+}
+
+.ce-qr {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Entrance motion (live presenting only) ──────────────────────────────── */
+@keyframes ce-rise {
+  from { opacity: 0; translate: 0 18px; }
+  to   { opacity: 1; translate: 0 0; }
+}
+
+@keyframes ce-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes ce-pop {
+  from { opacity: 0; scale: 0.4; }
+  70%  { opacity: 1; scale: 1.12; }
+  to   { opacity: 1; scale: 1; }
+}
+
+@keyframes ce-grow-x {
+  from { scale: 0 1; }
+  to   { scale: 1 1; }
+}
+
+.slide.active .ce-in {
+  animation: ce-rise 0.7s var(--ce-ease) both;
+  animation-delay: calc(120ms + var(--i, 0) * 70ms);
+}
+
+.slide.active .ce-in-fade {
+  animation: ce-fade 0.9s ease both;
+  animation-delay: calc(120ms + var(--i, 0) * 70ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slide.active .ce-in,
+  .slide.active .ce-in-fade,
+  .slide.active .ce-motion,
+  .slide.active .ce-backdrop--hero .ce-backdrop__img {
+    animation: none !important;
+  }
+}
+
+/* Exports capture a single still frame: show every element in its final state. */
+html[data-export-mode='capture'] .ce-in,
+html[data-export-mode='capture'] .ce-in-fade,
+html[data-export-mode='capture'] .ce-motion,
+html[data-export-mode='capture'] .ce-backdrop__img {
+  animation: none !important;
+  transition: none !important;
+}
+
+html[data-export-mode='capture'] .ce-live-only {
+  display: none !important;
+}

@@ -1,0 +1,181 @@
+/*
+ * Slide-specific details for the ConnectEdu deck. Geometry lives in the slide
+ * components (it mirrors the PowerPoint coordinates); this file only styles.
+ */
+
+/* ── Reorderable grids ───────────────────────────────────────────────────── */
+.ce-list {
+  position: absolute;
+  display: grid;
+  align-content: start;
+}
+
+.ce-item {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ── Cover / closing ─────────────────────────────────────────────────────── */
+.ce-glow-pink {
+  color: var(--ce-pink);
+  text-shadow: 0 0 42px rgba(244, 114, 182, 0.35);
+}
+
+.ce-hero-title {
+  letter-spacing: -0.005em;
+  text-shadow: 0 2px 24px rgba(4, 8, 20, 0.35);
+}
+
+/* ── Guidance, reimagined: from → to rows ────────────────────────────────── */
+.ce-shift {
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.ce-shift::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: var(--ce-bar, var(--ce-slate));
+}
+
+.ce-shift--to {
+  --ce-bar: var(--ce-cyan);
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.35), var(--ce-card-shadow);
+}
+
+/* ── Learner journey: connectors between steps ───────────────────────────── */
+.ce-link {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ce-navy);
+  box-shadow: 0 0 0 1px var(--ce-line), 0 6px 14px -6px rgba(0, 0, 0, 0.7);
+  color: var(--ce-mist);
+  z-index: 1;
+}
+
+.ce-banner {
+  border-radius: 14px;
+  background: linear-gradient(100deg, #1b2442 0%, var(--ce-navy) 60%, #161d35 100%);
+}
+
+/* ── Live demo: numbered steps ───────────────────────────────────────────── */
+.ce-step-dot {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ce-navy);
+  box-shadow: inset 0 0 0 2px var(--ce-dot, var(--ce-violet)), 0 8px 18px -10px rgba(0, 0, 0, 0.8);
+  color: #fff;
+  font-weight: 700;
+}
+
+.ce-panel {
+  border-radius: 18px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9), 0 30px 70px -30px rgba(0, 0, 0, 0.85);
+}
+
+/* ── Monday: counsellor dashboard ────────────────────────────────────────── */
+.ce-dashboard {
+  box-shadow: 0 0 0 1.33px var(--ce-violet), 0 30px 70px -30px rgba(0, 0, 0, 0.85);
+  border-radius: 16px;
+}
+
+.ce-track {
+  position: absolute;
+  height: 1.33px;
+  background: var(--ce-line);
+}
+
+.ce-track__fill {
+  position: absolute;
+  inset: -0.67px auto -0.67px 0;
+  background: var(--ce-track, var(--ce-violet));
+  transform-origin: left center;
+  border-radius: 2px;
+}
+
+.ce-dot {
+  position: absolute;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--ce-ink);
+  box-shadow: inset 0 0 0 1.33px var(--ce-line);
+}
+
+.ce-dot--on {
+  background: var(--ce-dot);
+  box-shadow: inset 0 0 0 1.33px var(--ce-dot), 0 0 0 3px color-mix(in srgb, var(--ce-dot) 18%, transparent);
+}
+
+.slide.active .ce-dot--on {
+  animation: ce-pop 0.5s var(--ce-ease) both;
+  animation-delay: calc(700ms + var(--d, 0) * 85ms);
+}
+
+.slide.active .ce-track__fill {
+  animation: ce-grow-x 0.9s var(--ce-ease) both;
+  animation-delay: calc(700ms + var(--d, 0) * 85ms);
+}
+
+/* ── Partnership ─────────────────────────────────────────────────────────── */
+.ce-chips {
+  display: flex;
+  gap: 8px;
+}
+
+.ce-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 31px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(34, 211, 238, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.55);
+  color: var(--ce-cyan);
+  white-space: nowrap;
+}
+
+/* ── Small layout helpers ────────────────────────────────────────────────── */
+.ce-center {
+  display: grid;
+  place-items: center;
+}
+
+.ce-balance {
+  text-wrap: balance;
+}
+
+/* Live demo: a soft connector running through the four step dots. */
+.ce-steps-line {
+  border-radius: 2px;
+  background: linear-gradient(
+    180deg,
+    rgba(167, 139, 250, 0.6) 0%,
+    rgba(34, 211, 238, 0.5) 34%,
+    rgba(244, 114, 182, 0.5) 67%,
+    rgba(52, 211, 153, 0.6) 100%
+  );
+}
+
+/* ── Shared motion guards for the details above ──────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .slide.active .ce-dot--on,
+  .slide.active .ce-track__fill {
+    animation: none !important;
+  }
+}
+
+html[data-export-mode='capture'] .ce-dot--on,
+html[data-export-mode='capture'] .ce-track__fill {
+  animation: none !important;
+}
