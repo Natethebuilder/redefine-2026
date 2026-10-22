@@ -555,7 +555,8 @@
   color: var(--ce-mist);
 }
 
-.ce-drawer__note code {
+.ce-drawer__note code,
+.ce-drawer__error code {
   color: var(--ce-lilac);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
@@ -684,6 +685,55 @@
 .ce-seg__btn.is-on {
   background: var(--ce-purple);
   color: #fff;
+}
+
+.ce-seg--grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.ce-signups {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.ce-signups__n {
+  color: #fff;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.ce-signups__label {
+  color: var(--ce-mist);
+  font-size: 13px;
+}
+
+a.ce-btn {
+  text-decoration: none;
+}
+
+.ce-check {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ce-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #e11d48;
+  cursor: inherit;
+}
+
+.ce-check.is-disabled {
+  color: var(--ce-slate);
+  cursor: default;
 }
 
 .ce-mod {

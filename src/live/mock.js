@@ -15,7 +15,13 @@ const POLLS = {
   roadblock: { screen: 'feedback', kind: 'text', options: [], max: 2, maxLen: 280 },
 }
 const SCREENS = new Set(Object.values(POLLS).map((p) => p.screen))
+// Phones can also be sent to the get-involved invite, which is not a poll.
+const INVOLVED = 'involved'
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const KINDS = ['pilot', 'mentor', 'partner', 'conversation']
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const SIGNUPS_PER_CLIENT = 200
+const SIGNUPS_CAP = 5000
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 // Same order as the database's COLLATE "C" sorting.
@@ -27,13 +33,17 @@ const uuid = () =>
   )
 
 function fresh() {
-  return { active: null, nextId: 1, votes: [] }
+  return { active: null, nextId: 1, votes: [], nextInterestId: 1, interest: [] }
 }
 
 function load() {
   try {
     const db = JSON.parse(localStorage.getItem(STORE))
-    if (db && Array.isArray(db.votes)) return db
+    if (db && Array.isArray(db.votes)) {
+      if (!Array.isArray(db.interest)) db.interest = []
+      db.nextInterestId ||= db.interest.length + 1
+      return db
+    }
   } catch {
     /* fall through */
   }
@@ -153,7 +163,7 @@ const handlers = {
 
   live_poll_set_active(db, { p_key, p_screen }) {
     requireKey(p_key)
-    if (p_screen != null && !SCREENS.has(p_screen)) throw new LiveError('invalid')
+    if (p_screen != null && p_screen !== INVOLVED && !SCREENS.has(p_screen)) throw new LiveError('invalid')
     db.active = p_screen ?? null
     return { ok: true, active: db.active }
   },
@@ -163,6 +173,83 @@ const handlers = {
     const before = db.votes.length
     db.votes = db.votes.filter((v) => POLLS[v.poll]?.screen !== p_screen)
     return { ok: true, deleted: before - db.votes.length }
+  },
+
+  live_poll_reset_all(db, { p_key, p_signups }) {
+    requireKey(p_key)
+    const deleted = db.votes.length
+    db.votes = []
+    let signups = 0
+    if (p_signups === true) {
+      signups = db.interest.length
+      db.interest = []
+    }
+    db.active = null
+    return { ok: true, deleted, signups_deleted: signups }
+  },
+
+  live_poll_interest_submit(db, args) {
+    const client = UUID.test(args.p_client || '') ? args.p_client.toLowerCase() : null
+    if (!client) throw new LiveError('invalid')
+    const asked = Array.isArray(args.p_interests) ? args.p_interests : []
+    const interests = KINDS.filter((k) => asked.includes(k))
+    if (!interests.length || asked.some((x) => !KINDS.includes(x))) throw new LiveError('invalid')
+    const name = cleanText(args.p_name)
+    const role = cleanText(args.p_role) || null
+    const organisation = cleanText(args.p_organisation)
+    const email = cleanText(args.p_email)
+    const phone = cleanText(args.p_phone) || null
+    const message = cleanText(args.p_message) || null
+    if (!name || !organisation || !email) throw new LiveError('invalid')
+    if (
+      name.length > 120 ||
+      organisation.length > 160 ||
+      email.length > 254 ||
+      role?.length > 120 ||
+      phone?.length > 40 ||
+      message?.length > 1000
+    ) {
+      throw new LiveError('too-long')
+    }
+    if (!EMAIL.test(email) || args.p_consent !== true) throw new LiveError('invalid')
+
+    const now = new Date().toISOString()
+    const fields = { interests, name, role, organisation, email, phone, message, consent_at: now, updated_at: now }
+    const existing = db.interest
+      .filter((r) => r.client === client && r.email.toLowerCase() === email.toLowerCase())
+      .sort((a, b) => b.id - a.id)[0]
+    if (existing) {
+      Object.assign(existing, fields)
+      return { ok: true, updated: true }
+    }
+    if (db.interest.filter((r) => r.client === client).length >= SIGNUPS_PER_CLIENT) throw new LiveError('limit')
+    if (db.interest.length >= SIGNUPS_CAP) throw new LiveError('full')
+    db.interest.push({ id: db.nextInterestId++, client, ...fields, created_at: now })
+    return { ok: true, updated: false }
+  },
+
+  live_poll_interest_count(db, { p_key }) {
+    requireKey(p_key)
+    const latest = db.interest.reduce((m, r) => (m && m > r.created_at ? m : r.created_at), null)
+    return { count: db.interest.length, latest }
+  },
+
+  live_poll_interest_export(db, { p_key }) {
+    requireKey(p_key)
+    return [...db.interest]
+      .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id - b.id)
+      .map((r) => ({
+        interests: r.interests,
+        name: r.name,
+        role: r.role,
+        organisation: r.organisation,
+        email: r.email,
+        phone: r.phone,
+        message: r.message,
+        consent_at: r.consent_at,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+      }))
   },
 
   live_poll_moderation(db, { p_key, p_screen }) {

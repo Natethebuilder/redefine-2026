@@ -825,6 +825,103 @@ ul {
   box-shadow: inset 0 0 0 1px var(--line);
 }
 
+/* Get involved: the three ways, each linking to the sign-up page */
+
+.v-ways {
+  display: grid;
+  gap: 12px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.v-ways > li {
+  animation: v-rise 0.5s var(--ease) both;
+  animation-delay: calc(80ms + var(--i, 0) * 55ms);
+}
+
+.v-way {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 14px 16px 16px;
+  border-radius: 16px;
+  background: var(--navy);
+  box-shadow: inset 0 0 0 1px var(--line), 0 18px 40px -26px rgba(0, 0, 0, 0.9);
+  color: #fff;
+  text-decoration: none;
+  transition: transform 0.2s var(--ease), box-shadow 0.3s var(--ease);
+}
+
+.v-way:active {
+  transform: scale(0.985);
+}
+
+.v-way:focus-visible {
+  outline: 3px solid var(--lilac);
+  outline-offset: 3px;
+}
+
+@media (hover: hover) {
+  .v-way:hover {
+    box-shadow: inset 0 0 0 1.5px var(--accent), 0 18px 40px -26px rgba(0, 0, 0, 0.9);
+  }
+}
+
+.v-way__n {
+  flex: none;
+  min-width: 34px;
+  color: var(--accent);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.v-way__body {
+  display: grid;
+  flex: 1;
+  gap: 4px;
+  min-width: 0;
+}
+
+.v-way__title {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.v-way__text {
+  color: var(--mist);
+  font-size: 15px;
+  line-height: 1.35;
+  text-wrap: pretty;
+}
+
+.v-way__go {
+  display: grid;
+  flex: none;
+  place-items: center;
+  align-self: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+
+.v-btn--block {
+  display: flex;
+  width: 100%;
+  margin-top: 20px;
+  text-decoration: none;
+}
+
+.v-hint--center {
+  text-align: center;
+  text-wrap: balance;
+}
+
 /* Footer and toast */
 
 .v-foot {
@@ -834,11 +931,34 @@ ul {
   color: var(--mist);
   font-size: 13px;
   text-align: center;
+  text-wrap: balance;
 }
 
 .v-foot__event {
   margin-top: 4px;
   color: var(--slate);
+}
+
+.v-foot__link {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 8px 4px;
+  color: var(--paper);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.v-foot__link strong {
+  color: var(--cyan);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.v-foot__link:focus-visible {
+  border-radius: 8px;
+  outline: 3px solid var(--lilac);
+  outline-offset: 2px;
 }
 
 .v-toast-slot {

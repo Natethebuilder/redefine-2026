@@ -1,12 +1,12 @@
 import edits from '../data/inline-edits.json'
-import { career, childhood, feedback } from '../data/content.js'
+import { career, childhood, feedback, involved } from '../data/content.js'
 
 /**
  * Text edited on the slides (`npm run dev`, then click to edit) is saved to
  * inline-edits.json. Apply the same edits here so phones match the screen.
  * Like the deck, an edit made against older source text is ignored.
  */
-function edited(id, source) {
+export function edited(id, source) {
   const entry = edits?.[id]
   if (!entry || typeof entry !== 'object' || typeof entry.value !== 'string') return source
   const current = String(source).replace(/[\r\n]+/g, ' ').trim()
@@ -37,5 +37,15 @@ export const COPY = {
     scaleLabel: edited('feedback.scale.label', 'LIKELIHOOD TO TRY'),
     textLabel: 'Your biggest roadblock',
     textPlaceholder: 'e.g. Our Grade 9 timetable is already packed',
+  },
+  involved: {
+    title: edited('involved.title', involved.title),
+    stand: edited('involved.stand', involved.stand),
+    email: edited('involved.email', involved.email),
+    ways: involved.ways.map((way) => ({
+      id: way.id,
+      title: edited(`involved.ways.${way.id}.title`, way.title),
+      text: edited(`involved.ways.${way.id}.text`, way.text),
+    })),
   },
 }

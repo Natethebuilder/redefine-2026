@@ -17,10 +17,11 @@ export default defineConfig({
   ],
   build: {
     rolldownOptions: {
-      // Two pages: the deck itself and the phone voting page at /vote/.
+      // The deck, the phone voting page (/vote/) and the sign-up page (/get-involved/).
       input: {
         main: page('./index.html'),
         vote: page('./vote/index.html'),
+        getInvolved: page('./get-involved/index.html'),
       },
     },
   },

@@ -54,6 +54,16 @@ export const SCREEN_ORDER = ['childhood', 'career', 'feedback']
 
 export const isScreen = (id) => Object.prototype.hasOwnProperty.call(SCREENS, id)
 
+/** Not a poll: phones show an invite to the get-involved sign-up page. */
+export const INVOLVED = 'involved'
+
+/** Everything the presenter can send phones to, in deck order. */
+export const PHONE_SCREENS = ['childhood', 'career', INVOLVED, 'feedback']
+
+export const isPhoneScreen = (id) => id === INVOLVED || isScreen(id)
+
+export const phoneLabel = (id) => (id === INVOLVED ? 'Get involved' : SCREENS[id]?.label || id)
+
 export function findPoll(pollId) {
   for (const screen of Object.values(SCREENS)) {
     const poll = screen.polls.find((p) => p.id === pollId)

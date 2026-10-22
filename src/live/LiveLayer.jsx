@@ -2,8 +2,8 @@ import { useSlides } from '@deckio/deck-engine'
 import { useEffect, useRef, useState } from 'react'
 import QrCode from '../components/QrCode.jsx'
 import { describeError, live } from './api.js'
-import { LIVE_CONFIGURED, MOCK, voteDisplayUrl, voteUrl } from './config.js'
-import { SCREENS, SCREEN_ORDER } from './polls.js'
+import { LIVE_CONFIGURED, MOCK, interestDisplayUrl, interestUrl, voteDisplayUrl, voteUrl } from './config.js'
+import { INVOLVED, PHONE_SCREENS, SCREENS, SCREEN_ORDER, isScreen, phoneLabel } from './polls.js'
 import { getLive, lock, refreshResults, setLive, toast, unlock, useLive } from './store.js'
 
 const isTyping = (el) => Boolean(el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)))
@@ -16,19 +16,67 @@ function csvCell(value) {
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
 }
 
-function downloadCsv(rows) {
-  const columns = ['poll', 'voter', 'slot', 'choice', 'response', 'hidden', 'created_at', 'updated_at']
-  const lines = [columns.join(','), ...rows.map((row) => columns.map((c) => csvCell(row[c])).join(','))]
+function downloadCsv(name, header, rows) {
+  const lines = [header, ...rows].map((cells) => cells.map(csvCell).join(','))
   const blob = new Blob([`\ufeff${lines.join('\r\n')}`], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
-  const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
+  const stamp = localStamp(new Date().toISOString()).replace(/[-:]/g, '').replace(' ', '-')
   const a = document.createElement('a')
   a.href = url
-  a.download = `redefine-2026-votes-${stamp}.csv`
+  a.download = `redefine-2026-${name}-${stamp}.csv`
   document.body.append(a)
   a.click()
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+const VOTE_COLUMNS = ['poll', 'voter', 'slot', 'choice', 'response', 'hidden', 'created_at', 'updated_at']
+
+const INTEREST_LABELS = { pilot: 'Pilot', mentor: 'Mentor', partner: 'Partner', conversation: 'Conversation' }
+
+/** Spreadsheet-friendly local time, e.g. 2026-10-23 14:05. */
+function localStamp(iso) {
+  const d = new Date(iso)
+  if (!iso || Number.isNaN(d.getTime())) return ''
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+function signupRows(rows) {
+  return rows.map((r) => [
+    localStamp(r.created_at),
+    (Array.isArray(r.interests) ? r.interests : []).map((i) => INTEREST_LABELS[i] || i).join('; '),
+    r.name,
+    r.role,
+    r.organisation,
+    r.email,
+    r.phone,
+    r.message,
+    localStamp(r.consent_at),
+    localStamp(r.updated_at),
+  ])
+}
+
+const SIGNUP_HEADER = [
+  'Signed up',
+  'Interested in',
+  'Name',
+  'Role',
+  'School or organisation',
+  'Email',
+  'Phone',
+  'Message',
+  'Consent given',
+  'Last updated',
+]
+
+/** Short "when" for the drawer: a time today, otherwise day and time. */
+function when(iso) {
+  const d = new Date(iso)
+  if (!iso || Number.isNaN(d.getTime())) return ''
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  if (d.toDateString() === new Date().toDateString()) return time
+  return `${d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}, ${time}`
 }
 
 function UnlockForm() {
@@ -67,6 +115,7 @@ function UnlockForm() {
 }
 
 function Moderation({ screen, presenterKey }) {
+  const revision = useLive((s) => s.revision)
   const [items, setItems] = useState(null)
   const [error, setError] = useState(null)
   const [tick, setTick] = useState(0)
@@ -91,7 +140,7 @@ function Moderation({ screen, presenterKey }) {
       ctrl.abort()
       clearTimeout(timer)
     }
-  }, [screen, presenterKey, tick, textPolls.length])
+  }, [screen, presenterKey, tick, textPolls.length, revision])
 
   if (!textPolls.length) return <p className="ce-drawer__note">Multiple-choice answers have nothing to moderate.</p>
   if (error && !items) return <p className="ce-drawer__error">{describeError(error)}</p>
@@ -124,16 +173,98 @@ function Moderation({ screen, presenterKey }) {
   )
 }
 
+/** Sign-up count for the drawer. Never fetches names or contact details. */
+function useSignupCount(presenterKey) {
+  const revision = useLive((s) => s.revision)
+  const [info, setInfo] = useState(null)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    const ctrl = new AbortController()
+    let timer
+    const load = async () => {
+      try {
+        const data = await live.interestCount(presenterKey, { signal: ctrl.signal })
+        setInfo({ count: Number(data?.count) || 0, latest: data?.latest || null })
+        setError(null)
+      } catch (err) {
+        if (err.code !== 'aborted') setError(err)
+      }
+      timer = setTimeout(load, 10000)
+    }
+    load()
+    return () => {
+      ctrl.abort()
+      clearTimeout(timer)
+    }
+  }, [presenterKey, revision])
+
+  return { info, error }
+}
+
+function Signups({ presenterKey, signups, busy, setBusy }) {
+  const { info, error } = signups
+  const notInstalled = error?.code === 'not-installed'
+
+  const exportCsv = async () => {
+    setBusy(true)
+    try {
+      const rows = await live.interestExport(presenterKey)
+      const list = Array.isArray(rows) ? rows : []
+      downloadCsv('sign-ups', SIGNUP_HEADER, signupRows(list))
+      toast(`Downloaded ${list.length} sign-up${list.length === 1 ? '' : 's'}`)
+    } catch (err) {
+      toast(describeError(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="ce-drawer__section">
+      <h3 className="ce-drawer__h">Sign-ups</h3>
+      {notInstalled ? (
+        <p className="ce-drawer__error">
+          Run the latest <code>supabase/live_polls.sql</code> in Supabase to collect sign-ups.
+        </p>
+      ) : error && !info ? (
+        <p className="ce-drawer__error">{describeError(error)}</p>
+      ) : (
+        <div className="ce-signups" aria-live="polite">
+          <span className="ce-signups__n">{info ? info.count : '–'}</span>
+          <span className="ce-signups__label">
+            {info?.count === 1 ? 'person has' : 'people have'} registered interest
+            {info?.latest ? ` · latest ${when(info.latest)}` : ''}
+          </span>
+        </div>
+      )}
+      <div className="ce-drawer__row">
+        <button type="button" className="ce-btn" onClick={exportCsv} disabled={busy || notInstalled || !info?.count}>
+          Download sign-ups (CSV)
+        </button>
+        <a className="ce-btn ce-btn--ghost" href={interestUrl()} target="_blank" rel="noreferrer">
+          Open the form ↗
+        </a>
+      </div>
+      <p className="ce-drawer__note">Names and contact details stay off the projector. They are only in the CSV.</p>
+    </section>
+  )
+}
+
 function Controls({ slideScreen, lastSet }) {
   const presenterKey = useLive((s) => s.key)
   const hidden = useLive((s) => s.resultsHidden)
   const [active, setActive] = useState(null)
-  const [tab, setTab] = useState(slideScreen || SCREEN_ORDER[0])
+  const [tab, setTab] = useState(isScreen(slideScreen) ? slideScreen : SCREEN_ORDER[0])
   const [confirm, setConfirm] = useState(false)
+  const [confirmAll, setConfirmAll] = useState(false)
+  const [alsoSignups, setAlsoSignups] = useState(false)
   const [busy, setBusy] = useState(false)
+  const signups = useSignupCount(presenterKey)
+  const signupCount = signups.info?.count ?? 0
 
   useEffect(() => {
-    if (slideScreen) setTab(slideScreen)
+    if (isScreen(slideScreen)) setTab(slideScreen)
   }, [slideScreen])
 
   useEffect(() => {
@@ -145,6 +276,16 @@ function Controls({ slideScreen, lastSet }) {
     const t = setTimeout(() => setConfirm(false), 5000)
     return () => clearTimeout(t)
   }, [confirm])
+
+  useEffect(() => {
+    if (!signupCount) setAlsoSignups(false)
+  }, [signupCount])
+
+  useEffect(() => {
+    if (!confirmAll) return undefined
+    const t = setTimeout(() => setConfirmAll(false), 5000)
+    return () => clearTimeout(t)
+  }, [confirmAll])
 
   useEffect(() => {
     const ctrl = new AbortController()
@@ -170,9 +311,13 @@ function Controls({ slideScreen, lastSet }) {
       const res = await live.setActive(presenterKey, screen)
       lastSet.current = screen
       setActive(res?.active ?? screen)
-      toast(`Phones now show: ${SCREENS[screen].label}`)
+      toast(`Phones now show: ${phoneLabel(screen)}`)
     } catch (err) {
-      toast(describeError(err))
+      toast(
+        screen === INVOLVED && (err.code === 'invalid' || err.code === 'not-installed')
+          ? 'Run the latest live_polls.sql to send phones to the sign-up invite'
+          : describeError(err),
+      )
     }
   }
 
@@ -194,11 +339,53 @@ function Controls({ slideScreen, lastSet }) {
     }
   }
 
+  const resetAll = async () => {
+    if (!confirmAll) {
+      setConfirmAll(true)
+      return
+    }
+    setBusy(true)
+    const withSignups = alsoSignups
+    try {
+      const res = await live.resetAll(presenterKey, withSignups)
+      const n = res?.deleted ?? 0
+      const m = res?.signups_deleted ?? 0
+      const count = (k, word) => `${k} ${word}${k === 1 ? '' : 's'}`
+      const cleared = [n > 0 && count(n, 'answer'), withSignups && m > 0 && count(m, 'sign-up')].filter(Boolean)
+      const done = cleared.length
+        ? `Cleared ${cleared.join(' and ')}`
+        : withSignups
+          ? 'Already fresh: nothing to clear'
+          : 'No answers to clear'
+      toast(withSignups ? done : `${done}. Sign-ups kept.`)
+      setAlsoSignups(false)
+      setActive(null)
+      lastSet.current = null
+      refreshResults()
+      // Phones went back to waiting; send them to this slide's question again.
+      if (slideScreen) {
+        try {
+          const again = await live.setActive(presenterKey, slideScreen)
+          lastSet.current = slideScreen
+          setActive(again?.active ?? slideScreen)
+        } catch {
+          /* the automatic follow will try again on the next live slide */
+        }
+      }
+    } catch (err) {
+      toast(err.code === 'not-installed' ? 'Run the latest live_polls.sql in Supabase first' : describeError(err))
+    } finally {
+      setBusy(false)
+      setConfirmAll(false)
+    }
+  }
+
   const exportCsv = async () => {
     setBusy(true)
     try {
       const rows = await live.exportVotes(presenterKey)
-      downloadCsv(Array.isArray(rows) ? rows : [])
+      const list = Array.isArray(rows) ? rows : []
+      downloadCsv('votes', VOTE_COLUMNS, list.map((row) => VOTE_COLUMNS.map((c) => row[c])))
     } catch (err) {
       toast(describeError(err))
     } finally {
@@ -210,14 +397,14 @@ function Controls({ slideScreen, lastSet }) {
     <>
       <section className="ce-drawer__section">
         <h3 className="ce-drawer__h">Phones are showing</h3>
-        <div className="ce-seg" role="group" aria-label="Question shown on phones">
-          {SCREEN_ORDER.map((id) => (
+        <div className="ce-seg ce-seg--grid" role="group" aria-label="Screen shown on phones">
+          {PHONE_SCREENS.map((id) => (
             <button key={id} type="button" className={`ce-seg__btn${active === id ? ' is-on' : ''}`} onClick={() => show(id)}>
-              {SCREENS[id].label}
+              {phoneLabel(id)}
             </button>
           ))}
         </div>
-        <p className="ce-drawer__note">Phones follow automatically when you reach a poll slide.</p>
+        <p className="ce-drawer__note">Phones follow automatically when you reach a poll slide or “Three ways to get involved”.</p>
       </section>
 
       <section className="ce-drawer__section">
@@ -253,14 +440,54 @@ function Controls({ slideScreen, lastSet }) {
           <button type="button" className={`ce-btn ce-btn--danger${confirm ? ' is-on' : ''}`} onClick={reset} disabled={busy}>
             {confirm ? 'Click again to delete all answers' : 'Reset this question'}
           </button>
+          <button type="button" className="ce-btn" onClick={exportCsv} disabled={busy}>
+            Download answers (CSV)
+          </button>
+        </div>
+      </section>
+
+      <Signups presenterKey={presenterKey} signups={signups} busy={busy} setBusy={setBusy} />
+
+      <section className="ce-drawer__section">
+        <h3 className="ce-drawer__h">Start fresh</h3>
+        <p className="ce-drawer__note">
+          Deletes every answer to every question, so you can test and then start the talk from zero. Sign-ups are kept
+          unless you tick the box.
+        </p>
+        <label className={`ce-check${signupCount ? '' : ' is-disabled'}`}>
+          <input
+            type="checkbox"
+            checked={alsoSignups}
+            disabled={!signupCount}
+            onChange={(e) => {
+              setAlsoSignups(e.target.checked)
+              setConfirmAll(false)
+            }}
+          />
+          {signupCount
+            ? `Also delete ${signupCount === 1 ? 'the 1 sign-up' : `all ${signupCount} sign-ups`}`
+            : 'Also delete sign-ups (none yet)'}
+        </label>
+        <div className="ce-drawer__row">
+          <button
+            type="button"
+            className={`ce-btn ce-btn--danger${confirmAll ? ' is-on' : ''}`}
+            onClick={resetAll}
+            disabled={busy}
+          >
+            {confirmAll
+              ? alsoSignups
+                ? 'Click again to delete answers and sign-ups'
+                : 'Click again to delete every answer'
+              : alsoSignups
+                ? 'Clear answers and sign-ups'
+                : 'Clear all answers'}
+          </button>
         </div>
       </section>
 
       <section className="ce-drawer__section">
         <div className="ce-drawer__row">
-          <button type="button" className="ce-btn" onClick={exportCsv} disabled={busy}>
-            Download CSV
-          </button>
           <button
             type="button"
             className="ce-btn ce-btn--ghost"
@@ -399,18 +626,40 @@ export default function LiveLayer({ slides }) {
     lastSet.current = slideScreen
     live.setActive(presenterKey, slideScreen).catch((err) => {
       lastSet.current = null
+      // Older database without the invite: phones simply stay where they are.
+      if (slideScreen === INVOLVED && (err.code === 'invalid' || err.code === 'not-installed')) {
+        console.warn('Phones cannot show the get-involved invite until the latest live_polls.sql is installed.')
+        return
+      }
       toast(describeError(err))
     })
   }, [presenter, presenterKey, slideScreen])
 
+  const signup = slideScreen === INVOLVED
+
   return (
     <div className="ce-live-ui ce-live-only">
       {qrOpen && (
-        <div className="ce-qr-overlay" role="dialog" aria-label="Scan to vote" onClick={() => setLive({ qrOpen: false })}>
+        <div
+          className="ce-qr-overlay"
+          role="dialog"
+          aria-label={signup ? 'Scan to get involved' : 'Scan to vote'}
+          onClick={() => setLive({ qrOpen: false })}
+        >
           <div className="ce-qr-overlay__card">
-            <QrCode className="ce-qr-overlay__code" value={voteUrl(qrScreen)} label="QR code: open the voting page" />
-            <div className="ce-qr-overlay__title">Scan to vote</div>
-            <div className="ce-qr-overlay__url">{voteDisplayUrl()}</div>
+            {signup ? (
+              <>
+                <QrCode className="ce-qr-overlay__code" value={interestUrl()} label="QR code: open the get-involved page" />
+                <div className="ce-qr-overlay__title">Scan to get involved</div>
+                <div className="ce-qr-overlay__url">{interestDisplayUrl()}</div>
+              </>
+            ) : (
+              <>
+                <QrCode className="ce-qr-overlay__code" value={voteUrl(qrScreen)} label="QR code: open the voting page" />
+                <div className="ce-qr-overlay__title">Scan to vote</div>
+                <div className="ce-qr-overlay__url">{voteDisplayUrl()}</div>
+              </>
+            )}
           </div>
         </div>
       )}

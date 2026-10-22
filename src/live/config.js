@@ -24,16 +24,36 @@ function voteBase() {
   return new URL(`${env.BASE_URL || '/'}vote/`, window.location.origin)
 }
 
-/** Full URL of the phone voting page, optionally opened on one screen. */
-export function voteUrl(screen) {
-  const url = voteBase()
-  if (screen) url.searchParams.set('p', screen)
+function withMock(url) {
   if (MOCK) url.searchParams.set('mock', '')
   return url.href.replace('mock=&', 'mock&').replace(/mock=$/, 'mock')
 }
 
+const display = (url) => `${url.host}${url.pathname}`.replace(/\/+$/, '')
+
+/** Full URL of the phone voting page, optionally opened on one screen. */
+export function voteUrl(screen) {
+  const url = voteBase()
+  if (screen) url.searchParams.set('p', screen)
+  return withMock(url)
+}
+
 /** Short, human-typeable form of the voting URL (no protocol or trailing slash). */
 export function voteDisplayUrl() {
-  const url = voteBase()
-  return `${url.host}${url.pathname}`.replace(/\/+$/, '')
+  return display(voteBase())
+}
+
+function interestBase() {
+  return new URL(`${env.BASE_URL || '/'}get-involved/`, window.location.origin)
+}
+
+/** Full URL of the get-involved sign-up page, optionally with one way ticked. */
+export function interestUrl(interest) {
+  const url = interestBase()
+  if (interest) url.searchParams.set('i', interest)
+  return withMock(url)
+}
+
+export function interestDisplayUrl() {
+  return display(interestBase())
 }

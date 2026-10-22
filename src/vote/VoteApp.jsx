@@ -1,43 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import logo from '../data/media/logo-white.png'
 import { describeError, live } from '../live/api.js'
-import { LIVE_CONFIGURED, MOCK } from '../live/config.js'
-import { SCREENS, SCREEN_ORDER, isScreen } from '../live/polls.js'
+import { INTEREST_FOR_WAY } from '../interest/interests.js'
+import { LIVE_CONFIGURED, MOCK, interestUrl } from '../live/config.js'
+import { INVOLVED, SCREENS, SCREEN_ORDER, isPhoneScreen, isScreen, phoneLabel } from '../live/polls.js'
+import { getVoter } from '../live/voter.js'
 import { COPY } from './copy.js'
 import { Arrow, Check } from './icons.jsx'
 import { ChoiceQuestion, ScaleQuestion, TextQuestion, WordsQuestion } from './questions.jsx'
 
-const VOTER_KEY = 'ce-voter'
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const POLL_EVERY = 3000
 const STEP_LABELS = { childhood: 'Who helped?', career: 'Your career', feedback: 'Feedback' }
 const MAX_BACKOFF = 15000
 
-function makeUuid() {
-  if (crypto.randomUUID) return crypto.randomUUID()
-  const b = crypto.getRandomValues(new Uint8Array(16))
-  b[6] = (b[6] & 0x0f) | 0x40
-  b[8] = (b[8] & 0x3f) | 0x80
-  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('')
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
-}
-
-/** Anonymous, per-browser id so people can change their answers. */
-function getVoter() {
-  try {
-    const saved = localStorage.getItem(VOTER_KEY)
-    if (saved && UUID.test(saved)) return saved
-    const id = makeUuid()
-    localStorage.setItem(VOTER_KEY, id)
-    return id
-  } catch {
-    return makeUuid()
-  }
-}
-
 function screenFromUrl() {
   const p = new URLSearchParams(window.location.search).get('p')
-  return p && isScreen(p) ? p : null
+  return p && isPhoneScreen(p) ? p : null
 }
 
 function rememberScreen(id) {
@@ -67,7 +45,48 @@ function normaliseMine(raw) {
   return out
 }
 
-const answered = (screen, mine) => SCREENS[screen].polls.some((poll) => mine[poll.id]?.length)
+const answered = (screen, mine) => isScreen(screen) && SCREENS[screen].polls.some((poll) => mine[poll.id]?.length)
+
+// Same colours as the numbers on the "Three ways to get involved" slide.
+const WAY_COLORS = ['#a78bfa', '#22d3ee', '#f472b6']
+const sentence = (text) => `${String(text).trim().replace(/[.!]+$/, '')}.`
+
+/** Shown while the presenter is on the "Three ways to get involved" slide. */
+function InvolvedCard() {
+  const { title, ways, stand } = COPY.involved
+  return (
+    <section className="v-card" aria-labelledby="v-q-title">
+      <p className="v-kicker">Get involved</p>
+      <h1 className="v-title" id="v-q-title">
+        {title}
+      </h1>
+      <p className="v-prompt">Tap the one that fits and leave your details. We’ll be in touch.</p>
+      <ul className="v-ways">
+        {ways.map((way, i) => (
+          <li key={way.id} style={{ '--accent': WAY_COLORS[i % WAY_COLORS.length], '--i': i }}>
+            <a className="v-way" href={interestUrl(INTEREST_FOR_WAY[way.id])}>
+              <span className="v-way__n" aria-hidden="true">
+                {String(i + 1).padStart(2, '0')}
+              </span>
+              <span className="v-way__body">
+                <span className="v-way__title">{way.title}</span>
+                <span className="v-way__text">{way.text}</span>
+              </span>
+              <span className="v-way__go" aria-hidden="true">
+                <Arrow />
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+      <a className="v-btn v-btn--block" href={interestUrl()}>
+        Register your interest
+        <Arrow />
+      </a>
+      <p className="v-hint v-hint--center">Takes about a minute. {sentence(stand)}</p>
+    </section>
+  )
+}
 
 export default function VoteApp() {
   const [voter] = useState(getVoter)
@@ -127,7 +146,7 @@ export default function VoteApp() {
           confirmed.current = next
           setMine(next)
         }
-        setActive(data?.active && isScreen(data.active) ? data.active : null)
+        setActive(data?.active && isPhoneScreen(data.active) ? data.active : null)
         setLoaded(true)
       } catch (err) {
         if (stopped || err.code === 'aborted') return
@@ -292,7 +311,7 @@ export default function VoteApp() {
             <button type="button" className="v-follow" onClick={() => go(following)}>
               <span className="v-follow__dot" aria-hidden="true" />
               <span>
-                Live now: <strong>{SCREENS[following].label}</strong>
+                Live now: <strong>{phoneLabel(following)}</strong>
               </span>
               <span className="v-follow__go" aria-hidden="true">
                 Go
@@ -302,7 +321,9 @@ export default function VoteApp() {
           )}
 
           <main className="v-main">
-            {screen ? (
+            {screen === INVOLVED ? (
+              <InvolvedCard key={INVOLVED} />
+            ) : screen ? (
               <section key={screen} className="v-card" aria-labelledby="v-q-title">
                 <p className="v-kicker">
                   Question {index + 1} of {SCREEN_ORDER.length}
@@ -371,7 +392,16 @@ export default function VoteApp() {
       )}
 
       <footer className="v-foot">
-        <p>Anonymous. No names or sign-in, just your answers.</p>
+        {screen === INVOLVED ? (
+          <p>Your answers stay anonymous. Registering interest is separate and optional.</p>
+        ) : (
+          <>
+            <a className="v-foot__link" href={interestUrl()}>
+              Want ConnectEdu at your school? <strong>Register your interest</strong>
+            </a>
+            <p>Anonymous. No names or sign-in, just your answers.</p>
+          </>
+        )}
         <p className="v-foot__event">Redefine Education 2026 · connectedu.world</p>
       </footer>
 

@@ -8,9 +8,14 @@
 -- are locked (row level security on, no policies), so nobody can read or edit
 -- votes directly. Presenter-only functions need the presenter key, which is
 -- stored as a bcrypt hash.
+--
+-- It also stores the sign-ups from the get-involved page (name, school, email
+-- and so on) in live_poll_interest. The site can only add sign-ups; reading
+-- them needs the presenter key (or the Supabase dashboard).
 
 -- 1. Choose the presenter key (keep the quotes). Anyone with it can switch
---    questions, hide answers and clear votes, so make it long and private.
+--    questions, hide answers, clear votes and download sign-ups, so make it
+--    long and private.
 select set_config('live_poll.key', '__PRESENTER_KEY__', false);
 
 do $$
@@ -67,12 +72,34 @@ create table if not exists public.live_poll_admin (
   key_hash text not null
 );
 
+-- Get-involved sign-ups. `client` is the phone's random id, so someone can
+-- correct their details without creating a second row.
+create table if not exists public.live_poll_interest (
+  id bigint generated always as identity primary key,
+  event text not null,
+  client uuid not null,
+  interests text[] not null,
+  name text not null check (char_length(name) between 1 and 120),
+  role text check (char_length(role) <= 120),
+  organisation text not null check (char_length(organisation) between 1 and 160),
+  email text not null check (char_length(email) between 3 and 254),
+  phone text check (char_length(phone) <= 40),
+  message text check (char_length(message) <= 1000),
+  consent_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists live_poll_interest_client_idx on public.live_poll_interest (event, client);
+
 alter table public.live_poll_polls enable row level security;
 alter table public.live_poll_votes enable row level security;
 alter table public.live_poll_state enable row level security;
 alter table public.live_poll_admin enable row level security;
+alter table public.live_poll_interest enable row level security;
 
-revoke all on table public.live_poll_polls, public.live_poll_votes, public.live_poll_state, public.live_poll_admin
+revoke all on table
+  public.live_poll_polls, public.live_poll_votes, public.live_poll_state, public.live_poll_admin, public.live_poll_interest
   from public, anon, authenticated;
 
 -- 3. Internal helpers (not callable from the browser)
@@ -356,8 +383,87 @@ begin
 end
 $$;
 
+-- A sign-up from the get-involved page. Sending again from the same phone with
+-- the same email updates that sign-up instead of adding another.
+create or replace function public.live_poll_interest_submit(
+  p_event text,
+  p_client text,
+  p_interests text[],
+  p_name text,
+  p_role text,
+  p_organisation text,
+  p_email text,
+  p_phone text,
+  p_message text,
+  p_consent boolean
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions, pg_temp
+as $$
+declare
+  c_kinds constant text[] := array['pilot', 'mentor', 'partner', 'conversation'];
+  v_client uuid := public.live_poll__uuid(p_client);
+  v_interests text[];
+  v_name text := public.live_poll__clean(p_name);
+  v_role text := nullif(public.live_poll__clean(p_role), '');
+  v_org text := public.live_poll__clean(p_organisation);
+  v_email text := public.live_poll__clean(p_email);
+  v_phone text := nullif(public.live_poll__clean(p_phone), '');
+  v_message text := nullif(public.live_poll__clean(p_message), '');
+  v_id bigint;
+begin
+  if v_client is null or not exists (select 1 from public.live_poll_admin where event = p_event) then
+    raise exception 'invalid';
+  end if;
+  v_interests := array(select k from unnest(c_kinds) with ordinality as t(k, n) where k = any (p_interests) order by n);
+  if cardinality(v_interests) = 0
+    or exists (select 1 from unnest(p_interests) as x where x is null or not (x = any (c_kinds))) then
+    raise exception 'invalid';
+  end if;
+  if v_name = '' or v_org = '' or v_email = '' then
+    raise exception 'invalid';
+  end if;
+  if char_length(v_name) > 120 or char_length(v_org) > 160 or char_length(v_email) > 254
+    or char_length(v_role) > 120 or char_length(v_phone) > 40 or char_length(v_message) > 1000 then
+    raise exception 'too-long';
+  end if;
+  if v_email !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' or p_consent is not true then
+    raise exception 'invalid';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(p_event || '/interest/' || v_client::text, 0));
+
+  select id into v_id
+    from public.live_poll_interest
+    where event = p_event and client = v_client and lower(email) = lower(v_email)
+    order by id desc
+    limit 1;
+  if v_id is not null then
+    update public.live_poll_interest
+      set interests = v_interests, name = v_name, role = v_role, organisation = v_org, email = v_email,
+          phone = v_phone, message = v_message, consent_at = now(), updated_at = now()
+      where id = v_id;
+    return jsonb_build_object('ok', true, 'updated', true);
+  end if;
+
+  -- A shared tablet at the stand may send many; this only stops runaway scripts.
+  if (select count(*) from public.live_poll_interest where event = p_event and client = v_client) >= 200 then
+    raise exception 'limit';
+  end if;
+  if (select count(*) from public.live_poll_interest where event = p_event) >= 5000 then
+    raise exception 'full';
+  end if;
+  insert into public.live_poll_interest (event, client, interests, name, role, organisation, email, phone, message)
+    values (p_event, v_client, v_interests, v_name, v_role, v_org, v_email, v_phone, v_message);
+  return jsonb_build_object('ok', true, 'updated', false);
+end
+$$;
+
 -- 5. Presenter functions (need the presenter key)
 
+-- Phones can show any poll screen, or 'involved' (the get-involved invite).
 create or replace function public.live_poll_set_active(p_event text, p_key text, p_screen text)
 returns jsonb
 language plpgsql
@@ -366,7 +472,7 @@ set search_path = public, extensions, pg_temp
 as $$
 begin
   perform public.live_poll__require_key(p_event, p_key);
-  if p_screen is not null and not exists (
+  if p_screen is not null and p_screen <> 'involved' and not exists (
     select 1 from public.live_poll_polls where event = p_event and screen = p_screen
   ) then
     raise exception 'invalid';
@@ -393,6 +499,69 @@ begin
     where v.event = p_event and p.event = v.event and p.id = v.poll and p.screen = p_screen;
   get diagnostics v_deleted = row_count;
   return jsonb_build_object('ok', true, 'deleted', v_deleted);
+end
+$$;
+
+-- "Start fresh": every answer to every question, and phones back to waiting.
+-- Sign-ups are only deleted when p_signups is true.
+create or replace function public.live_poll_reset_all(p_event text, p_key text, p_signups boolean default false)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions, pg_temp
+as $$
+declare
+  v_votes integer;
+  v_signups integer := 0;
+begin
+  perform public.live_poll__require_key(p_event, p_key);
+  delete from public.live_poll_votes where event = p_event;
+  get diagnostics v_votes = row_count;
+  if p_signups is true then
+    delete from public.live_poll_interest where event = p_event;
+    get diagnostics v_signups = row_count;
+  end if;
+  update public.live_poll_state set active = null, updated_at = now() where event = p_event;
+  return jsonb_build_object('ok', true, 'deleted', v_votes, 'signups_deleted', v_signups);
+end
+$$;
+
+-- How many sign-ups there are (no personal details, safe to show on screen).
+create or replace function public.live_poll_interest_count(p_event text, p_key text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, extensions, pg_temp
+as $$
+begin
+  perform public.live_poll__require_key(p_event, p_key);
+  return (
+    select jsonb_build_object('count', count(*), 'latest', max(created_at))
+    from public.live_poll_interest
+    where event = p_event
+  );
+end
+$$;
+
+create or replace function public.live_poll_interest_export(p_event text, p_key text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, extensions, pg_temp
+as $$
+begin
+  perform public.live_poll__require_key(p_event, p_key);
+  return coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'interests', to_jsonb(interests), 'name', name, 'role', role, 'organisation', organisation,
+      'email', email, 'phone', phone, 'message', message,
+      'consent_at', consent_at, 'created_at', created_at, 'updated_at', updated_at
+    ) order by created_at, id)
+    from public.live_poll_interest
+    where event = p_event
+  ), '[]'::jsonb);
 end
 $$;
 
@@ -482,11 +651,15 @@ revoke all on function
   public.live_poll_retract(text, text, text, integer),
   public.live_poll_status(text, text),
   public.live_poll_results(text, text),
+  public.live_poll_interest_submit(text, text, text[], text, text, text, text, text, text, boolean),
   public.live_poll_set_active(text, text, text),
   public.live_poll_reset(text, text, text),
+  public.live_poll_reset_all(text, text, boolean),
   public.live_poll_moderation(text, text, text),
   public.live_poll_hide(text, text, text, text, boolean),
-  public.live_poll_export(text, text)
+  public.live_poll_export(text, text),
+  public.live_poll_interest_count(text, text),
+  public.live_poll_interest_export(text, text)
   from public;
 
 grant execute on function
@@ -495,11 +668,15 @@ grant execute on function
   public.live_poll_retract(text, text, text, integer),
   public.live_poll_status(text, text),
   public.live_poll_results(text, text),
+  public.live_poll_interest_submit(text, text, text[], text, text, text, text, text, text, boolean),
   public.live_poll_set_active(text, text, text),
   public.live_poll_reset(text, text, text),
+  public.live_poll_reset_all(text, text, boolean),
   public.live_poll_moderation(text, text, text),
   public.live_poll_hide(text, text, text, text, boolean),
-  public.live_poll_export(text, text)
+  public.live_poll_export(text, text),
+  public.live_poll_interest_count(text, text),
+  public.live_poll_interest_export(text, text)
   to anon, authenticated;
 
 -- 7. The polls in the deck (keep in sync with src/live/polls.js) and the key.

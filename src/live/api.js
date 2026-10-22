@@ -77,6 +77,26 @@ export const live = {
   moderation: (key, screen, opts) => rpc('live_poll_moderation', { ...ev, p_key: key, p_screen: screen }, opts),
   hide: (key, poll, text, hidden) => rpc('live_poll_hide', { ...ev, p_key: key, p_poll: poll, p_text: text, p_hidden: hidden }),
   exportVotes: (key) => rpc('live_poll_export', { ...ev, p_key: key }, { timeout: 20000 }),
+  resetAll: (key, signups) => rpc('live_poll_reset_all', { ...ev, p_key: key, p_signups: signups === true }),
+  interestSubmit: (client, form) =>
+    rpc(
+      'live_poll_interest_submit',
+      {
+        ...ev,
+        p_client: client,
+        p_interests: form.interests,
+        p_name: form.name,
+        p_role: form.role,
+        p_organisation: form.organisation,
+        p_email: form.email,
+        p_phone: form.phone,
+        p_message: form.message,
+        p_consent: form.consent === true,
+      },
+      { timeout: 15000 },
+    ),
+  interestCount: (key, opts) => rpc('live_poll_interest_count', { ...ev, p_key: key }, opts),
+  interestExport: (key) => rpc('live_poll_interest_export', { ...ev, p_key: key }, { timeout: 20000 }),
 }
 
 /** Friendly sentence for an error code (used on phones and in the panel). */
