@@ -7,6 +7,7 @@
  */
 
 export const SITE_URL = 'https://www.connectedu.world'
+export const SURVEY_URL = `${SITE_URL}/survey`
 
 export const footer = {
   left: 'Redefine Education 2026',
@@ -288,13 +289,13 @@ export const demo = {
   kicker: 'LIVE DEMO',
   title: 'Your turn: take the interest survey',
   steps: [
-    { id: 'scan', text: 'Scan the code or go to connectedu.world' },
+    { id: 'scan', text: 'Scan the code or go to connectedu.world/survey' },
     { id: 'survey', text: 'Take the survey as if you were 15' },
     { id: 'pathways', text: 'See your suggested pathways' },
     { id: 'globe', text: 'Explore one programme on the globe' },
     { id: 'compare', text: 'Compare results with your neighbour' },
   ],
-  url: 'connectedu.world',
+  url: 'connectedu.world/survey',
 }
 
 export const career = {

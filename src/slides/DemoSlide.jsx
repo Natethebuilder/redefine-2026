@@ -3,7 +3,7 @@ import CeSlide, { Kicker, Title } from '../components/CeSlide.jsx'
 import GridList from '../components/GridList.jsx'
 import QrCode from '../components/QrCode.jsx'
 import { Box, Card, Frame, pt } from '../components/primitives.jsx'
-import { SITE_URL, demo } from '../data/content.js'
+import { SURVEY_URL, demo } from '../data/content.js'
 
 const DOT_COLORS = ['#a78bfa', '#22d3ee', '#f472b6', '#34d399', '#a78bfa']
 const STEP = 53
@@ -38,7 +38,7 @@ export default function DemoSlide({ index }) {
 
       <Card x={835} y={154} w={387} h={442} className="ce-panel" i={4}>
         <Box x={45} y={33} w={298} h={298}>
-          <QrCode className="ce-qr" value={SITE_URL} label="QR code: connectedu.world" />
+          <QrCode className="ce-qr" value={SURVEY_URL} label="QR code: connectedu.world/survey" />
         </Box>
         <Frame x={0} y={355} w={387} h={48} size={20} bold color="var(--ce-purple)" align="center">
           <Editable id="demo.url">{demo.url}</Editable>
